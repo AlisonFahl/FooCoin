@@ -1,11 +1,12 @@
-var fs = require('fs');
-var rsaSign = require("jsrsasign");
-var server = require('http').createServer();
-var io = require('socket.io')(server);
+const fs = require('fs');
+const rsaSign = require("jsrsasign");
+const server = require('http').createServer();
+const io = require('socket.io')(server);
+const spawn = require('threads').spawn;
 
-var Block = require("./../core/block.js");
-var Blockchain = require("./../core/blockchain.js");
-var Transaction = require("./../core/transaction.js");
+const Block = require("./../core/block.js");
+const Blockchain = require("./../core/blockchain.js");
+const Transaction = require("./../core/transaction.js");
 
 var config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 
@@ -40,37 +41,52 @@ function loadBlockchain(cb){
 	var blocks = blockchainJson.map(function(e){
 		var transaction;
 		if(e.transaction){
-			var transaction = new Transaction(e.transaction.from, e.transaction.to, e.transaction.amount, e.transaction.uuid);
+			transaction = new Transaction(e.transaction.from, e.transaction.to, e.transaction.amount, e.transaction.uuid);
 			transaction.hash = e.transaction.hash;
 		}
-		return new Block(transaction, e.minerAddress, e.previousHash, e.hash, e.powNumber);
+		return new Block(transaction, e.minerAddress, e.previousHash, e.hash, e.nounce);
 	});
 	
 	blockchain = new Blockchain(blocks);
-	
 	console.log("Finished loading blockchain");
 	
 	cb();
 }
 
 function mine(){
-	while(true){
-		let transaction = "";
+	let transaction = "";
 		
-		if(transactionPool.length > 0){
-			transaction = transactionPool.shift();
-		}
+	if(transactionPool.length > 0){
+		transaction = transactionPool.shift();
+	}
+	
+	var lastBlock = blockchain.chain[blockchain.chain.length - 1];
+	var newBlock = new Block(transaction, config.address, lastBlock.hash);
+	console.log("Mining block " + blockchain.chain.length + "...");
+	
+	var miningThread = spawn(function(input, done){
+		const Block = require(input.__dirname + "\\..\\core\\block.js");
+		const Transaction = require(input.__dirname + "\\..\\core\\transaction.js");
+
+		let miningBlock = new Block(input.miningBlock.transaction ? new Transaction(input.miningBlock.transaction.from, input.miningBlock.transaction.to, input.miningBlock.transaction.amount, input.miningBlock.transaction.uuid) : ""
+		, input.miningBlock.minerAddress, input.miningBlock.previousHash, input.miningBlock.hash, input.miningBlock.nounce);
+		miningBlock.mineBlock();
+		done(miningBlock);
+	});
+	miningThread.send({miningBlock: newBlock, __dirname: __dirname });
+	miningThread.on("done", function(output){
+		newBlock.nounce = output.nounce;
+		newBlock.hash = output.hash;
 		
-		var lastBlock = blockchain.chain[blockchain.chain.length - 1];
-		var newBlock = new Block(transaction, config.address, lastBlock.hash);
-		console.log("Mining block " + blockchain.chain.length + "...");
-		newBlock.mineBlock();
 		console.log("Block mined");
+		
 		blockchain.chain.push(newBlock);
 		
 		var json = JSON.stringify(blockchain.chain);
 		fs.writeFileSync(config.storage, json, 'utf8');
-	}
+		
+		mine();
+	});
 }
 
 function isTransactionValid(transaction){
@@ -79,6 +95,4 @@ function isTransactionValid(transaction){
 	return ec.verifyHex(rsaSign.KJUR.crypto.Util.sha256(transaction.toString()), transaction.hash, transaction.from);
 }
 
-loadBlockchain(function(){
-	mine();
-});
+loadBlockchain(mine);

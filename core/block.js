@@ -1,23 +1,24 @@
 var SHA256 = require("crypto-js/sha256");
 
-const miningDifficulty = 5;
+const miningDifficulty = 6;
 
 class Block{
-	constructor(data, minerAddress, previousHash = "", hash = "", powNumber = 0){		
-		this.data = data;
+	constructor(transaction, minerAddress, previousHash = "", hash = "", nounce = 0){		
+		this.transaction = transaction;
 		this.previousHash = previousHash;
-		this.powNumber = powNumber;
+		this.nounce = nounce;
 		this.hash = hash;
 		this.minerAddress = minerAddress;
 	}
 	
 	calculateHash(){
-		return SHA256(`${this.previousHash}${this.data}${this.powNumber}${this.minerAddress}`).toString();
+		var transactionHash = this.transaction ? this.transaction.hash : "";
+		return SHA256(`${this.previousHash}${transactionHash}${this.nounce}${this.minerAddress}`).toString();
 	}
 	
 	mineBlock(){
 		while(this.hash.substring(0, miningDifficulty) !== Array(miningDifficulty + 1).join("0")){
-			this.powNumber++;
+			this.nounce++;
 			this.hash = this.calculateHash();
 		}
 	}
