@@ -17,15 +17,19 @@ io.listen(3000);
 
 io.on("connection", function(socket){
 	socket.on("add transaction", function(data){
+		console.log("Received new transaction: " + data.hash);
+		
 		var transaction = new Transaction(data.from, data.to, data.amount, data.uuid);
 		transaction.hash = data.hash;
 		
-		if(isTransactionValid(transaction) && blockchain.getBalance(transaction.from) >= transaction.amount && blockchain.containsTransaction(transaction.hash)){
+		if(!transactionPool.some(x => x.hash === transaction.hash) && isTransactionValid(transaction) && blockchain.getBalance(transaction.from) >= transaction.amount && !blockchain.containsTransaction(transaction.hash)){
 			transactionPool.push(transaction);
 			console.log("Added transaction " + transaction.hash + " to the pool.");
+			socket.emit("transaction add result", true);
 		}
 		else{
 			console.log("Rejected transaction " + transaction.hash);
+			socket.emit("transaction add result", false);
 		}
 	});
 	socket.on("get balance", function(address){
@@ -70,6 +74,9 @@ function mine(){
 
 		let miningBlock = new Block(input.miningBlock.transaction ? new Transaction(input.miningBlock.transaction.from, input.miningBlock.transaction.to, input.miningBlock.transaction.amount, input.miningBlock.transaction.uuid) : ""
 		, input.miningBlock.minerAddress, input.miningBlock.previousHash, input.miningBlock.hash, input.miningBlock.nounce);
+		if(miningBlock.transaction){
+			miningBlock.transaction.hash = input.miningBlock.transaction.hash;
+		}
 		miningBlock.mineBlock();
 		done(miningBlock);
 	});
