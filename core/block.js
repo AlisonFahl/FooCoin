@@ -1,6 +1,6 @@
 var SHA256 = require("crypto-js/sha256");
 
-const miningDifficulty = 6;
+const miningDifficulty = 5;
 
 class Block{
 	constructor(transaction, minerAddress, previousHash = "", hash = "", nounce = 0){		
