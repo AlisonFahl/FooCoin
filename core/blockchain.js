@@ -42,7 +42,7 @@ class Blockchain{
 	}
 	
 	containsTransaction(hash){
-		return this.chain.slice(1).some(x => x.transaction.hash === hash);
+		return this.chain.slice(1).some(x => x.transaction && x.transaction.hash === hash);
 	}
 }
 
