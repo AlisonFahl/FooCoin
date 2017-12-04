@@ -50,12 +50,12 @@ if(argv.p){
 		socket.emit("add transaction", transaction);
 	});
 	
-	socket.on("transaction add result", function(success){
-		if(success){
+	socket.on("transaction add result", function(result){
+		if(result.success){
 			console.log("Transaction confirmed... Waiting to be added in a block.");
 		}
 		else{
-			console.log("Transaction rejected.");
+			console.error(result.err);
 		}
 		process.exit(1);
 	});

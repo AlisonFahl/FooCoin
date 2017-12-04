@@ -17,24 +17,84 @@ var transactionPool = [];
 io.listen(3001);
 
 io.on("connection", function(socket){
+	//Event for receiving transaction requests
 	socket.on("add transaction", function(data){
-		console.log("Received new transaction: " + data.hash);
-		
-		var transaction = new Transaction(data.from, data.to, data.amount, data.uuid);
-		transaction.hash = data.hash;
-		
-		if(!transactionPool.some(x => x.hash === transaction.hash) && isTransactionValid(transaction) && blockchain.getBalance(transaction.from) >= transaction.amount && !blockchain.containsTransaction(transaction.hash)){
-			transactionPool.push(transaction);
-			console.log("Added transaction " + transaction.hash + " to the pool.");
-			socket.emit("transaction add result", true);
+		try{
+			if(data && data.from && data.to && data.amount && data.uuid && data.hash){
+				var transaction = new Transaction(data.from, data.to, Math.floor(data.amount), data.uuid);
+				transaction.hash = data.hash;
+				
+				//Do not allow negative/zero amount
+				if(transaction.amount <= 0){
+					socket.emit("transaction add result", {
+						success: false,
+						err: "Amount cannot be negative or zero."
+					});
+					return;
+				}
+				
+				//Do not allow two transactions from same sender. This is just a trick to avoid double spending
+				if(transactionPool.some(x => x.from === transaction.from)){
+					socket.emit("transaction add result", {
+						success: false,
+						err: "There is already a transaction from this address in the pool. Wait it to be concluded before sending more coins."
+					});
+					return;
+				}
+				
+				//Validate transaction signature
+				if(!isTransactionValid(transaction)){
+					socket.emit("transaction add result", {
+						success: false,
+						err: "The transaction signature is not valid."
+					});
+					return;
+				}
+				
+				//Assert available balance
+				if(blockchain.getBalance(transaction.from) < transaction.amount){
+					socket.emit("transaction add result", {
+						success: false,
+						err: "Insufficient founds."
+					});
+					return;
+				}
+				
+				//Do not allow replayed transactions
+				if(blockchain.containsTransaction(transaction.hash)){
+					socket.emit("transaction add result", {
+						success: false,
+						err: "This transaction already exists in the ledger."
+					});
+					return;
+				}
+				
+				transactionPool.push(transaction);
+				socket.emit("transaction add result", {
+					success: true
+				});
+			}
+			else{
+				socket.emit("transaction add result", {
+					success: false,
+					err: "Invalid parameters."
+				});
+				return;
+			}
 		}
-		else{
-			console.log("Rejected transaction " + transaction.hash);
-			socket.emit("transaction add result", false);
+		catch(err){
+			console.error(err);
 		}
 	});
+	
+	//Event for checking address balance
 	socket.on("get balance", function(address){
-		socket.emit("balance", blockchain.getBalance(address));
+		try{
+			socket.emit("balance", blockchain.getBalance(address));
+		}
+		catch(err){
+			console.error(err);
+		}
 	});
 });
 
