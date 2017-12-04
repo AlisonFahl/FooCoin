@@ -4,6 +4,8 @@ var argv = require('minimist')(process.argv.slice(2));
 
 var Transaction = require("./../core/transaction.js");
 
+var config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
+
 //Generate new key pair
 if(argv.g){
 	console.log("Generating a new ECDSA key pair!");
@@ -19,7 +21,7 @@ if(argv.g){
 
 //Check address balance
 if(argv.b){
-	var socket = io("http://localhost:3000");
+	var socket = io(config.server);
 	
 	socket.on("connect", function(){
 		socket.emit("get balance", argv.b);
@@ -36,7 +38,7 @@ if(argv.b){
 
 //Send payment
 if(argv.p){
-	var socket = io("http://localhost:3000");
+	var socket = io(config.server);
 	
 	socket.on("connect", function(){
 		var transaction = new Transaction(argv.from, argv.to, argv.amount, require("uuid/v4")());
