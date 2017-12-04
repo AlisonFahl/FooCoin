@@ -1,6 +1,7 @@
-var rsaSign = require("jsrsasign");
-var io = require("socket.io-client");
-var argv = require('minimist')(process.argv.slice(2));
+const fs = require('fs');
+const rsaSign = require("jsrsasign");
+const io = require("socket.io-client");
+const argv = require('minimist')(process.argv.slice(2));
 
 var Transaction = require("./../core/transaction.js");
 
@@ -24,6 +25,7 @@ if(argv.b){
 	var socket = io(config.server);
 	
 	socket.on("connect", function(){
+		console.log("Requesting balance...");
 		socket.emit("get balance", argv.b);
 	});
 	socket.on("balance", function(balance){
@@ -38,15 +40,31 @@ if(argv.b){
 
 //Send payment
 if(argv.p){
+	if(!argv.from){
+		console.error("Parameter 'from' is not valid");
+		process.exit(0);
+	}
+	if(!argv.to){
+		console.error("Parameter 'to' is not valid");
+		process.exit(0);
+	}
+	if(!argv.amount || !Number.isInteger(argv.amount)){
+		console.error("Parameter 'amount' is not valid");
+		process.exit(0);
+	}
+	if(!argv.secret){
+		console.error("Parameter 'secret' is not valid");
+		process.exit(0);
+	}
+	
 	var socket = io(config.server);
 	
 	socket.on("connect", function(){
 		var transaction = new Transaction(argv.from, argv.to, argv.amount, require("uuid/v4")());
 		
+		//Sign transaction
 		var ec = new rsaSign.KJUR.crypto.ECDSA({'curve': 'secp256r1'});
-		
 		transaction.hash = ec.signHex(rsaSign.KJUR.crypto.Util.sha256(transaction.toString()), argv.secret)
-		console.log("Transaction hash: " + transaction.hash);
 		
 		console.log("Adding transaction to the pool.");
 		socket.emit("add transaction", transaction);
@@ -54,7 +72,7 @@ if(argv.p){
 	
 	socket.on("transaction add result", function(result){
 		if(result.success){
-			console.log("Transaction confirmed... Waiting to be added in a block.");
+			console.log("Transaction confirmed... Wait it to be added in a block.");
 		}
 		else{
 			console.error(result.err);
