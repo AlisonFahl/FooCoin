@@ -9,11 +9,12 @@ const Blockchain = require("./../core/blockchain.js");
 const Transaction = require("./../core/transaction.js");
 
 var config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
+var storageLocation = process.env.APPDATA + "\\FooCoin\\.blockchain\\blockchain.json";
 
 var blockchain;
 var transactionPool = [];
 
-io.listen(3000);
+io.listen(3001);
 
 io.on("connection", function(socket){
 	socket.on("add transaction", function(data){
@@ -40,19 +41,40 @@ io.on("connection", function(socket){
 function loadBlockchain(cb){
 	console.log("Loading blockchain from disk");
 	
-	var blockchainJson = JSON.parse(fs.readFileSync(config.storage, 'utf8'));
+	var blocks;
 	
-	var blocks = blockchainJson.map(function(e){
-		var transaction;
-		if(e.transaction){
-			transaction = new Transaction(e.transaction.from, e.transaction.to, e.transaction.amount, e.transaction.uuid);
-			transaction.hash = e.transaction.hash;
+	if(fs.existsSync(storageLocation)){
+		blocks = JSON.parse(fs.readFileSync(storageLocation, 'utf8')).map(function(e){
+			var transaction = e.transaction;
+			if(e.transaction && e.transaction !== "Genesis"){
+				transaction = new Transaction(e.transaction.from, e.transaction.to, e.transaction.amount, e.transaction.uuid);
+				transaction.hash = e.transaction.hash;
+			}
+			return new Block(transaction, e.minerAddress, e.previousHash, e.hash, e.nounce);
+		});
+	}
+	else{
+		console.log("No blockchain found! Generating a new one with a single genesis block");
+		
+		blocks = [{
+			transaction: "Genesis",
+			previousHash: "",
+			hash: "",
+			minerAddress: config.address,
+			nounce: 0
+		}];
+		
+		if (!fs.existsSync(process.env.APPDATA + "\\FooCoin")){
+			fs.mkdirSync(process.env.APPDATA + "\\FooCoin");
 		}
-		return new Block(transaction, e.minerAddress, e.previousHash, e.hash, e.nounce);
-	});
+		if (!fs.existsSync(process.env.APPDATA + "\\FooCoin\\.blockchain")){
+			fs.mkdirSync(process.env.APPDATA + "\\FooCoin\\.blockchain");
+		}
+		fs.writeFileSync(storageLocation, JSON.stringify(blocks), 'utf8');
+	}
 	
 	blockchain = new Blockchain(blocks);
-	console.log("Finished loading blockchain");
+	console.log("Finished loading blockchain! Total blocks: " + blockchain.chain.length);
 	
 	cb();
 }
@@ -90,7 +112,7 @@ function mine(){
 		blockchain.chain.push(newBlock);
 		
 		var json = JSON.stringify(blockchain.chain);
-		fs.writeFileSync(config.storage, json, 'utf8');
+		fs.writeFileSync(storageLocation, json, 'utf8');
 		
 		mine();
 	});
