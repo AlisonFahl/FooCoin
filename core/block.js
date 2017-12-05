@@ -1,4 +1,4 @@
-var SHA256 = require("crypto-js/sha256");
+var SHA256 = require("jsrsasign").KJUR.crypto.Util.sha256;
 
 const miningDifficulty = 5;
 
