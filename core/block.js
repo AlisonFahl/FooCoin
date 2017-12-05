@@ -16,6 +16,7 @@ class Block{
 		return SHA256(`${this.previousHash}${transactionHash}${this.nounce}${this.minerAddress}`).toString();
 	}
 	
+	//loop incrementing nounce value until a hash starting with %miningDifficulty% zeroes is found. This is the proof of work method
 	mineBlock(){
 		while(this.hash.substring(0, miningDifficulty) !== Array(miningDifficulty + 1).join("0")){
 			this.nounce++;
@@ -23,6 +24,7 @@ class Block{
 		}
 	}
 	
+	//check if both hash and proof of work are valid
 	isValid(){
 		return this.calculateHash() === this.hash && this.hash.substring(0, miningDifficulty) === Array(miningDifficulty + 1).join("0");
 	}

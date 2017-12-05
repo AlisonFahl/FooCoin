@@ -4,6 +4,7 @@ class Blockchain{
 		this.validate();
 	}
 	
+	//Shrinks blockchain until last valid block
 	validate(){
 		for(let i=1; i<this.chain.length; i++){
 			if(this.chain[i].previousHash !== this.chain[i - 1].hash || !this.chain[i].isValid()){

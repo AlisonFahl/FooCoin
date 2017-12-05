@@ -69,6 +69,7 @@ io.on("connection", function(socket){
 					return;
 				}
 				
+				//add to transaction pool
 				transactionPool.push(transaction);
 				socket.emit("transaction add result", {
 					success: true
@@ -98,6 +99,7 @@ io.on("connection", function(socket){
 	});
 });
 
+//load blockchain file from disk or create a new one
 function loadBlockchain(cb){
 	console.log("Loading blockchain from disk");
 	
@@ -139,45 +141,59 @@ function loadBlockchain(cb){
 	cb();
 }
 
+//mining routine
 function mine(){
 	let transaction = "";
-		
+	
+	//get any pending transaction
 	if(transactionPool.length > 0){
 		transaction = transactionPool.shift();
 	}
 	
+	//take last block
 	var lastBlock = blockchain.chain[blockchain.chain.length - 1];
+	//prepare new block
 	var newBlock = new Block(transaction, config.address, lastBlock.hash);
 	console.log("Mining block " + blockchain.chain.length + "...");
-	
+	//start the mining process in a separated thread
 	var miningThread = spawn(function(input, done){
 		const Block = require(input.__dirname + "\\..\\core\\block.js");
 		const Transaction = require(input.__dirname + "\\..\\core\\transaction.js");
-
+		
+		//re-instantiate in the thread context, appending transaction if any
 		let miningBlock = new Block(input.miningBlock.transaction ? new Transaction(input.miningBlock.transaction.from, input.miningBlock.transaction.to, input.miningBlock.transaction.amount, input.miningBlock.transaction.uuid) : ""
 		, input.miningBlock.minerAddress, input.miningBlock.previousHash, input.miningBlock.hash, input.miningBlock.nounce);
 		if(miningBlock.transaction){
 			miningBlock.transaction.hash = input.miningBlock.transaction.hash;
 		}
+		//start mining
 		miningBlock.mineBlock();
+		//callback once done
 		done(miningBlock);
 	});
+	//send parameters to the thread context.
 	miningThread.send({miningBlock: newBlock, __dirname: __dirname });
+	//event called once mining is done
 	miningThread.on("done", function(output){
+		//apply the nounce value found along with the hash
 		newBlock.nounce = output.nounce;
 		newBlock.hash = output.hash;
 		
 		console.log("Block mined");
 		
+		//append to the blockchain
 		blockchain.chain.push(newBlock);
 		
+		//persist updated blockchain on file
 		var json = JSON.stringify(blockchain.chain);
 		fs.writeFileSync(storageLocation, json, 'utf8');
 		
+		//start mining next block
 		mine();
 	});
 }
 
+//signature verification method
 function isTransactionValid(transaction){
 	var ec = new rsaSign.KJUR.crypto.ECDSA({'curve': 'secp256r1'});
 	
