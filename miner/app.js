@@ -141,6 +141,23 @@ function loadBlockchain(cb){
 	cb();
 }
 
+//Mining Thread
+var miningThread = spawn(function(input, done){
+	const Block = require(input.__dirname + "\\..\\core\\block.js");
+	const Transaction = require(input.__dirname + "\\..\\core\\transaction.js");
+	
+	//re-instantiate in the thread context, appending transaction if any
+	let miningBlock = new Block(input.miningBlock.transaction ? new Transaction(input.miningBlock.transaction.from, input.miningBlock.transaction.to, input.miningBlock.transaction.amount, input.miningBlock.transaction.uuid) : ""
+	, input.miningBlock.minerAddress, input.miningBlock.previousHash, input.miningBlock.hash, input.miningBlock.nounce);
+	if(miningBlock.transaction){
+		miningBlock.transaction.hash = input.miningBlock.transaction.hash;
+	}
+	//start mining
+	miningBlock.mineBlock();
+	//callback once done
+	done(miningBlock);
+});
+
 //mining routine
 function mine(){
 	let transaction = "";
@@ -154,23 +171,9 @@ function mine(){
 	var lastBlock = blockchain.chain[blockchain.chain.length - 1];
 	//prepare new block
 	var newBlock = new Block(transaction, config.address, lastBlock.hash);
-	console.log("Mining block " + blockchain.chain.length + "...");
+	
 	//start the mining process in a separated thread
-	var miningThread = spawn(function(input, done){
-		const Block = require(input.__dirname + "\\..\\core\\block.js");
-		const Transaction = require(input.__dirname + "\\..\\core\\transaction.js");
-		
-		//re-instantiate in the thread context, appending transaction if any
-		let miningBlock = new Block(input.miningBlock.transaction ? new Transaction(input.miningBlock.transaction.from, input.miningBlock.transaction.to, input.miningBlock.transaction.amount, input.miningBlock.transaction.uuid) : ""
-		, input.miningBlock.minerAddress, input.miningBlock.previousHash, input.miningBlock.hash, input.miningBlock.nounce);
-		if(miningBlock.transaction){
-			miningBlock.transaction.hash = input.miningBlock.transaction.hash;
-		}
-		//start mining
-		miningBlock.mineBlock();
-		//callback once done
-		done(miningBlock);
-	});
+	console.log("Mining block " + blockchain.chain.length + "...");
 	//send parameters to the thread context.
 	miningThread.send({miningBlock: newBlock, __dirname: __dirname });
 	//event called once mining is done
