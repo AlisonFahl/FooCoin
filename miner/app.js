@@ -13,6 +13,7 @@ var storageLocation = process.env.APPDATA + "\\FooCoin\\.blockchain\\blockchain.
 
 var blockchain;
 var transactionPool = [];
+var miningThread;
 
 io.listen(3001);
 
@@ -141,22 +142,41 @@ function loadBlockchain(cb){
 	cb();
 }
 
-//Mining Thread
-var miningThread = spawn(function(input, done){
-	const Block = require(input.__dirname + "\\..\\core\\block.js");
-	const Transaction = require(input.__dirname + "\\..\\core\\transaction.js");
+function prepareMiningThread(cb){
+	//Mining Thread
+	miningThread = spawn(function(input, done){
+		const Block = require(input.__dirname + "\\..\\core\\block.js");
+		const Transaction = require(input.__dirname + "\\..\\core\\transaction.js");
+		
+		//re-instantiate in the thread context, appending transaction if any
+		let miningBlock = new Block(input.miningBlock.transaction ? new Transaction(input.miningBlock.transaction.from, input.miningBlock.transaction.to, input.miningBlock.transaction.amount, input.miningBlock.transaction.uuid) : ""
+		, input.miningBlock.minerAddress, input.miningBlock.previousHash, input.miningBlock.hash, input.miningBlock.nounce);
+		if(miningBlock.transaction){
+			miningBlock.transaction.hash = input.miningBlock.transaction.hash;
+		}
+		//start mining
+		miningBlock.mineBlock();
+		//callback once done
+		done(miningBlock);
+	});
+
+	//event called once mining is done
+	miningThread.on("done", function(output){
+		console.log("Block mined");
+		
+		//apply the nounce value found along with the hash
+		let newBlock = new Block(output.transaction ? new Transaction(output.transaction.from, output.transaction.to, output.transaction.amount, output.transaction.uuid) : ""
+		, output.minerAddress, output.previousHash, output.hash, output.nounce);
+		if(newBlock.transaction){
+			newBlock.transaction.hash = output.transaction.hash;
+		}
+		
+		//append to the blockchain and start mining next block
+		attachBlock(newBlock, mine);
+	});
 	
-	//re-instantiate in the thread context, appending transaction if any
-	let miningBlock = new Block(input.miningBlock.transaction ? new Transaction(input.miningBlock.transaction.from, input.miningBlock.transaction.to, input.miningBlock.transaction.amount, input.miningBlock.transaction.uuid) : ""
-	, input.miningBlock.minerAddress, input.miningBlock.previousHash, input.miningBlock.hash, input.miningBlock.nounce);
-	if(miningBlock.transaction){
-		miningBlock.transaction.hash = input.miningBlock.transaction.hash;
-	}
-	//start mining
-	miningBlock.mineBlock();
-	//callback once done
-	done(miningBlock);
-});
+	cb();
+}
 
 //mining routine
 function mine(){
@@ -176,24 +196,17 @@ function mine(){
 	console.log("Mining block " + blockchain.chain.length + "...");
 	//send parameters to the thread context.
 	miningThread.send({miningBlock: newBlock, __dirname: __dirname });
-	//event called once mining is done
-	miningThread.on("done", function(output){
-		//apply the nounce value found along with the hash
-		newBlock.nounce = output.nounce;
-		newBlock.hash = output.hash;
-		
-		console.log("Block mined");
-		
-		//append to the blockchain
-		blockchain.chain.push(newBlock);
-		
-		//persist updated blockchain on file
-		var json = JSON.stringify(blockchain.chain);
-		fs.writeFileSync(storageLocation, json, 'utf8');
-		
-		//start mining next block
-		mine();
-	});
+}
+
+function attachBlock(newBlock, cb){
+	//attach
+	blockchain.chain.push(newBlock);
+	
+	//persist updated blockchain on file
+	var json = JSON.stringify(blockchain.chain);
+	fs.writeFileSync(storageLocation, json, 'utf8');
+	
+	cb();
 }
 
 //signature verification method
@@ -203,4 +216,6 @@ function isTransactionValid(transaction){
 	return ec.verifyHex(rsaSign.KJUR.crypto.Util.sha256(transaction.toString()), transaction.hash, transaction.from);
 }
 
-loadBlockchain(mine);
+loadBlockchain(function(){
+	prepareMiningThread(mine);
+});
