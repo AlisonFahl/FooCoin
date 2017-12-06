@@ -4,9 +4,11 @@ const server = require('http').createServer();
 const io = require('socket.io')(server);
 const spawn = require('threads').spawn;
 
-const Block = require("./../core/block.js");
-const Blockchain = require("./../core/blockchain.js");
-const Transaction = require("./../core/transaction.js");
+const core = require("./../core/index.js");
+
+const Block = core.Block;
+const Blockchain = core.Blockchain;
+const Transaction = core.Transaction;
 
 var config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 var storageLocation = process.env.APPDATA + "\\FooCoin\\.blockchain\\blockchain.json";
